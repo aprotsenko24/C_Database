@@ -141,7 +141,7 @@ Student *search(char *name_of_student)
                 break;
             }
         }
-        if (*n != name_of_student[i]) // Does not work
+        if (*n != name_of_student[i])
         {
             if (S == NULL)
             {
