@@ -92,12 +92,14 @@ void print_out_data(Student *NewStudent)
     printf("%s,", NewStudent->major);
     printf("%s\n", NewStudent->year);
 }
-void print_in_data(FILE *fptr, Student *NewStudent)
+FILE *print_in_data(FILE *fptr, Student *NewStudent)
 {
     fprintf(fptr, "%s,", NewStudent->name);
     fprintf(fptr, "%s,", NewStudent->phone_number);
     fprintf(fptr, "%s,", NewStudent->major);
     fprintf(fptr, "%s\n", NewStudent->year);
+    fflush(fptr);
+    return fptr;
 }
 void insert_data(Student *NewStudent, char *name, char *phone_number, char *major, char *year)
 {
@@ -128,21 +130,18 @@ Student *search(char *name_of_student)
 }
 void search_student(char *name)
 {
-    if (search(name) == NULL)
-    {
+    Student *S = search(name);
+    if (S == NULL)
         printf("\nSorry, the student named '%s' was not found in the database.\n", name);
-    }
     else
-    {
-        print_out_data(search(name));
-    }
+        print_out_data(S);
 }
-int add_student(char *name, char *phone_number, char *major, char *year, FILE *fptr)
+FILE *add_student(char *name, char *phone_number, char *major, char *year, FILE *fptr)
 {
     if (search(name) != NULL)
     {
         printf("\nSorry, the student '%s' is already in the database. Cannot add again.\n", name);
-        return 1;
+        return fptr;
     }
     Student *NewStudent = (Student *)malloc(sizeof(Student));
     int index = 0;
@@ -152,59 +151,62 @@ int add_student(char *name, char *phone_number, char *major, char *year, FILE *f
     printf("\nAdding the following information to the database for '%s':\n", name);
     insert_data(NewStudent, name, phone_number, major, year);
     print_out_data(NewStudent);
-    print_in_data(fptr, NewStudent);
-    return 0;
+    fptr = print_in_data(fptr, NewStudent);
+    return fopen("Database.txt", "a+");
 }
-FILE *delete_records(Student *S, FILE *fptr)
+FILE *delete_student(char *name, FILE *fptr)
 {
     FILE *temp;
     temp = fopen("temp.txt", "w");
     if (!temp || !fptr)
     {
-        return NULL;
+        printf("Error: Could not open the files.\n");
+        return fopen("Database.txt", "a+");
     }
-    char buffer[STRING_SIZE];
-    rewind(fptr);
-    while (fgets(buffer, STRING_SIZE, fptr))
-    {
-        const char *c = strchr(buffer, ',');
-        size_t len = c ? (size_t)(c - buffer) : strlen(c);
-        if (strncmp(buffer, S->name, len) != 0)
-        {
-            fputs(buffer, temp);
-        }
-    }
-    fclose(temp);
-    fclose(fptr);
-    fptr = fopen("Database.txt", "w");
-    temp = fopen("temp.txt", "r");
-    while (fgets(buffer, STRING_SIZE, temp))
-    {
-        fputs(buffer, fptr);
-    }
-    fclose(fptr);
-    fclose(temp);
-    remove("temp.txt");
-    fptr = fopen("Database.txt", "a+");
-    return fptr;
-}
-int delete_student(char *name, FILE *fptr)
-{
     if (search(name) == NULL)
     {
-        printf("\nCould not find the student '%s' in the database.\n", name);
-        return 1;
-    }
-    if (delete_records == NULL)
-    {
-        printf("Error: Could not open the files.\n");
-        return 1;
+        search_student(name);
+        return fopen("Database.txt", "a+");
     }
     int index = 0;
     index = hash(name);
     Student *S = HashTable[index];
-    fptr = delete_records(S, fptr);
+    char buffer[STRING_SIZE];
+    if (fptr == NULL)
+    {
+        printf("Error: Could not open the files.\n");
+        return fopen("Database.txt", "a+");
+    }
+    rewind(fptr);
+    while (fgets(buffer, STRING_SIZE, fptr))
+    {
+        char namebuf[30];
+        sscanf(buffer, "%[^,],", namebuf);
+        if (strcmp(namebuf, name) != 0)
+        {
+            fputs(buffer, temp);
+            printf("%s", buffer);
+        }
+    }
+    rewind(fptr);
+    fclose(temp);
+    FILE *db = fopen("Database.txt", "w");
+    temp = fopen("temp.txt", "r");
+    if (!temp || !db)
+    {
+        printf("Error: Could not open the files.\n");
+        return fopen("Database.txt", "a+");
+    }
+    while (fgets(buffer, STRING_SIZE, temp))
+    {
+        fputs(buffer, db);
+    }
+    fclose(db);
+    fclose(temp);
+    remove("temp.txt");
+    fptr = fopen("Database.txt", "a+");
     Student *prev = NULL;
+    S = search(name);
     while (S != NULL)
     {
         if (strcmp(S->name, name) == 0)
@@ -214,7 +216,7 @@ int delete_student(char *name, FILE *fptr)
                 HashTable[index] = S->next;
                 free(S);
                 printf("\nThe student '%s' has been successfully deleted from the database.\n", name);
-                return 0;
+                break;
             }
             else
             {
@@ -222,7 +224,7 @@ int delete_student(char *name, FILE *fptr)
                 prev->next = S->next;
                 free(S);
                 printf("\nThe student '%s' has been successfully deleted from the database.\n", name);
-                return 0;
+                break;
             }
         }
         else
@@ -239,13 +241,13 @@ int delete_student(char *name, FILE *fptr)
             }
         }
     }
-    printf("\nSorry, I did not find the name of this student in my database\n");
-    return 1;
+    return fopen("Database.txt", "a+");
 }
-void read_file(FILE *fptr)
+FILE *read_file(FILE *fptr)
 {
     int index = 0;
     char line[200], name[30], phone_number[30], major[30], year[5];
+    rewind(fptr);
     while (fgets(line, sizeof(line), fptr))
     {
         if (sscanf(line, "%[^,],%[^,],%[^,],%[^,\n]",
@@ -257,6 +259,97 @@ void read_file(FILE *fptr)
             insert_data(NewStudent, name, phone_number, major, year);
         }
     }
+    rewind(fptr);
+    return fptr;
+}
+FILE *update_student(FILE *fptr, char *name, char *old, char *new)
+{
+    FILE *temp;
+    temp = fopen("temp.txt", "w");
+    Student *S = search(name);
+    if (!temp || !fptr)
+    {
+        return fopen("Database.txt", "a+");
+        return fptr;
+    }
+    if (search(name) == NULL)
+    {
+        search_student(name);
+        return fopen("Database.txt", "a+");
+    }
+    char buffer[STRING_SIZE];
+    rewind(fptr);
+    int index = 0;
+    char line[200], namecsv[30], phone_number[30], major[30], year[5];
+    while (fgets(line, sizeof(line), fptr))
+    {
+        if (sscanf(line, "%[^,],%[^,],%[^,],%[^,\n]",
+                   namecsv, phone_number, major, year) == 4)
+        {
+            if (strcmp(namecsv, S->name) == 0)
+            {
+                if (strcmp(namecsv, old) == 0)
+                {
+                    fprintf(temp, "%s,", new);
+                }
+                else
+                {
+                    fprintf(temp, "%s,", namecsv);
+                }
+                if (strcmp(phone_number, old) == 0)
+                {
+                    fprintf(temp, "%s,", new);
+                }
+                else
+                {
+                    fprintf(temp, "%s,", phone_number);
+                }
+                if (strcmp(major, old) == 0)
+                {
+                    fprintf(temp, "%s,", new);
+                }
+                else
+                {
+                    fprintf(temp, "%s,", major);
+                }
+                if (strcmp(year, old) == 0)
+                {
+                    fprintf(temp, "%s\n", new);
+                }
+                else
+                {
+                    fprintf(temp, "%s\n", year);
+                }
+            }
+            else
+            {
+                fprintf(temp, "%s,%s,%s,%s\n", namecsv, phone_number, major, year);
+            }
+        }
+    }
+    fclose(temp);
+    FILE *db = fopen("Database.txt", "w");
+    temp = fopen("temp.txt", "r");
+    if (!temp || !db)
+    {
+        printf("Error: Could not open the files.\n");
+        return fptr;
+    }
+    while (fgets(buffer, STRING_SIZE, temp))
+    {
+        fputs(buffer, db);
+    }
+    fclose(db);
+    fclose(temp);
+    remove("temp.txt");
+    fptr = fopen("Database.txt", "a+");
+    init();
+    read_file(fptr);
+    index = hash(name);
+    hashtable(&index, S);
+    S = search(name);
+    printf("\nThe student '%s' records were updated successfully from '%s' to '%s'\n", S->name, old, new);
+    return fopen("Database.txt", "a+");
 }
 int main()
 {
@@ -268,24 +361,30 @@ int main()
         printf("Error: Could not open the file.\n");
         return 1;
     }
-    read_file(fptr);
-    add_student("Artem Portsenko", "+1(413)673-1614", "Computer Engineering", "2024", fptr);
-    /* Add a student with two letters reversed in the name to test collision handling
+    fptr = read_file(fptr);
+    fptr = add_student("Artem Portsenko", "+1(413)673-1614", "Computer Engineering", "2024", fptr);
+    /*Add a student with two letters reversed in the name to test collision handling
    for the search() and hashtable() functions. */
     search_student("Oleksandr");
     /* Check if the search function correctly displays a message when the student
        is not found in the database. */
     search_student("Artem Portsenko");
+    search_student("Artem Protsenko");
     /* Otherwise, verify that the program can locate both students that
        map to the same index in the hash table. */
-    delete_student("Artem Protsenko", fptr);
+    fptr = delete_student("Artem Protsenko", fptr);
     /* Now test the delete function by removing an existing student. */
     search_student("Artem Protsenko");
     /* If we try to search for a student who was already deleted, we should see
         that they’re no longer found—neither in the file nor in the hash table. */
-    delete_student("Oleksandr", fptr);
+    fptr = delete_student("Oleksandr", fptr);
     /* Try deleting a student who doesn't exist in the hash table,
     and make sure it prints a message that the student isn’t found. */
+    fptr = update_student(fptr, "Artem", "Artem", "Protsenko");
+    /* Attempt to update the student records of a non-existant student*/
+    fptr = update_student(fptr, "Sami Alshawi", "+1(413)673-1614", "+380(68)520-0120");
+    /* The function updates the information about the particular student, in case you know the student's name
+and passs the old string you want to change and the new one*/
     fclose(fptr);
     // Close the file after all operations are done.
     return 0;
@@ -296,14 +395,13 @@ You can now use the "Database.txt" file with the following functions:
 - Use `search_student(char *name)` to search for a student by name.
 
 - Add a new student using:
-    int add_student(char *name, char *phone_number, char *major, char *year, FILE *fptr)
-  This function returns 0 if the student is successfully added,
-  or 1 if the student already exists — with an appropriate message.
+    FILE* add_student(char *name, char *phone_number, char *major, char *year, FILE *fptr)
+  This added,with an appropriate message.
 
 - Remove a student with:
-    int delete_student(char *name, FILE *fptr)
+    FILE* delete_student(char *name, FILE *fptr)
   This function deletes the student both from the hash table and the file.
-  It rewrites "Database.txt" without the deleted student’s information.
-  It returns 0 if deletion was successful, or 1 if the student wasn’t found,
-  along with a printed message.
+- Update the info about the student with:
+    FILE *update_student(FILE *fptr, char *name, char *old, char *new)
+
 */
